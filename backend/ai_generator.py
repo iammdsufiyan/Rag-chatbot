@@ -1,8 +1,8 @@
-import anthropic
+import google.generativeai as genai
 from typing import List, Optional, Dict, Any
 
 class AIGenerator:
-    """Handles interactions with Anthropic's Claude API for generating responses"""
+    """Handles interactions with Google's Gemini API for generating responses"""
     
     # Static system prompt to avoid rebuilding on each call
     SYSTEM_PROMPT = """ You are an AI assistant specialized in course materials and educational content with access to a comprehensive search tool for course information.
@@ -30,16 +30,9 @@ Provide only the direct answer to what was asked.
 """
     
     def __init__(self, api_key: str, model: str):
-        self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = model
+        genai.configure(api_key=api_key)
+        self.model = genai.GenerativeModel(model, system_instruction=self.SYSTEM_PROMPT)
         
-        # Pre-build base API parameters
-        self.base_params = {
-            "model": self.model,
-            "temperature": 0,
-            "max_tokens": 800
-        }
-    
     def generate_response(self, query: str,
                          conversation_history: Optional[str] = None,
                          tools: Optional[List] = None,
@@ -57,79 +50,59 @@ Provide only the direct answer to what was asked.
             Generated response as string
         """
         
-        # Build system content efficiently - avoid string ops when possible
-        system_content = (
-            f"{self.SYSTEM_PROMPT}\n\nPrevious conversation:\n{conversation_history}"
-            if conversation_history 
-            else self.SYSTEM_PROMPT
+        # Prepare API call parameters efficiently
+        contents = []
+        if conversation_history:
+            contents.append({"role": "model", "parts": [conversation_history]})
+        contents.append({"role": "user", "parts": [query]})
+
+        # Get response from Gemini
+        response = self.model.generate_content(
+            contents,
+            generation_config={"temperature": 0},
+            tools=tools
         )
         
-        # Prepare API call parameters efficiently
-        api_params = {
-            **self.base_params,
-            "messages": [{"role": "user", "content": query}],
-            "system": system_content
-        }
-        
-        # Add tools if available
-        if tools:
-            api_params["tools"] = tools
-            api_params["tool_choice"] = {"type": "auto"}
-        
-        # Get response from Claude
-        response = self.client.messages.create(**api_params)
-        
         # Handle tool execution if needed
-        if response.stop_reason == "tool_use" and tool_manager:
-            return self._handle_tool_execution(response, api_params, tool_manager)
+        if response.candidates[0].finish_reason == "TOOL_CODE":
+            return self._handle_tool_execution(response, contents, tool_manager)
         
         # Return direct response
-        return response.content[0].text
+        return response.candidates[0].content.parts[0].text
     
-    def _handle_tool_execution(self, initial_response, base_params: Dict[str, Any], tool_manager):
+    def _handle_tool_execution(self, initial_response, contents: List, tool_manager):
         """
         Handle execution of tool calls and get follow-up response.
         
         Args:
             initial_response: The response containing tool use requests
-            base_params: Base API parameters
+            contents: The conversation history
             tool_manager: Manager to execute tools
             
         Returns:
             Final response text after tool execution
         """
-        # Start with existing messages
-        messages = base_params["messages"].copy()
-        
-        # Add AI's tool use response
-        messages.append({"role": "assistant", "content": initial_response.content})
-        
         # Execute all tool calls and collect results
         tool_results = []
-        for content_block in initial_response.content:
-            if content_block.type == "tool_use":
+        for tool_call in initial_response.candidates[0].content.parts:
+            if tool_call.function_call:
                 tool_result = tool_manager.execute_tool(
-                    content_block.name, 
-                    **content_block.input
+                    tool_call.function_call.name,
+                    **tool_call.function_call.args
                 )
                 
                 tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": content_block.id,
-                    "content": tool_result
+                    "tool_code": tool_call.function_call.name,
+                    "tool_response": {"output": tool_result}
                 })
         
         # Add tool results as single message
         if tool_results:
-            messages.append({"role": "user", "content": tool_results})
-        
-        # Prepare final API call without tools
-        final_params = {
-            **self.base_params,
-            "messages": messages,
-            "system": base_params["system"]
-        }
+            contents.append({"role": "user", "parts": tool_results})
         
         # Get final response
-        final_response = self.client.messages.create(**final_params)
-        return final_response.content[0].text
+        final_response = self.model.generate_content(
+            contents,
+            generation_config={"temperature": 0}
+        )
+        return final_response.candidates[0].content.parts[0].text

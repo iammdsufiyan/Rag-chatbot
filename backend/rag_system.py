@@ -16,7 +16,7 @@ class RAGSystem:
         # Initialize core components
         self.document_processor = DocumentProcessor(config.CHUNK_SIZE, config.CHUNK_OVERLAP)
         self.vector_store = VectorStore(config.CHROMA_PATH, config.EMBEDDING_MODEL, config.MAX_RESULTS)
-        self.ai_generator = AIGenerator(config.ANTHROPIC_API_KEY, config.ANTHROPIC_MODEL)
+        self.ai_generator = AIGenerator(config.GEMINI_API_KEY, config.GEMINI_MODEL)
         self.session_manager = SessionManager(config.MAX_HISTORY)
         
         # Initialize search tools
@@ -122,7 +122,7 @@ class RAGSystem:
         response = self.ai_generator.generate_response(
             query=prompt,
             conversation_history=history,
-            tools=self.tool_manager.get_tool_definitions(),
+            tools=None,
             tool_manager=self.tool_manager
         )
         
