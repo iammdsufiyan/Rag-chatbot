@@ -5,7 +5,7 @@ const API_URL = '/api';
 let currentSessionId = null;
 
 // DOM elements
-let chatMessages, chatInput, sendButton, totalCourses, courseTitles;
+let chatMessages, chatInput, sendButton;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
@@ -13,12 +13,9 @@ document.addEventListener('DOMContentLoaded', () => {
     chatMessages = document.getElementById('chatMessages');
     chatInput = document.getElementById('chatInput');
     sendButton = document.getElementById('sendButton');
-    totalCourses = document.getElementById('totalCourses');
-    courseTitles = document.getElementById('courseTitles');
     
     setupEventListeners();
     createNewSession();
-    loadCourseStats();
 });
 
 // Event Listeners
@@ -27,16 +24,6 @@ function setupEventListeners() {
     sendButton.addEventListener('click', sendMessage);
     chatInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') sendMessage();
-    });
-    
-    
-    // Suggested questions
-    document.querySelectorAll('.suggested-item').forEach(button => {
-        button.addEventListener('click', (e) => {
-            const question = e.target.getAttribute('data-question');
-            chatInput.value = question;
-            sendMessage();
-        });
     });
 }
 
@@ -149,43 +136,5 @@ function escapeHtml(text) {
 async function createNewSession() {
     currentSessionId = null;
     chatMessages.innerHTML = '';
-    addMessage('Welcome to the Course Materials Assistant! I can help you with questions about courses, lessons and specific content. What would you like to know?', 'assistant', null, true);
-}
-
-// Load course statistics
-async function loadCourseStats() {
-    try {
-        console.log('Loading course stats...');
-        const response = await fetch(`${API_URL}/courses`);
-        if (!response.ok) throw new Error('Failed to load course stats');
-        
-        const data = await response.json();
-        console.log('Course data received:', data);
-        
-        // Update stats in UI
-        if (totalCourses) {
-            totalCourses.textContent = data.total_courses;
-        }
-        
-        // Update course titles
-        if (courseTitles) {
-            if (data.course_titles && data.course_titles.length > 0) {
-                courseTitles.innerHTML = data.course_titles
-                    .map(title => `<div class="course-title-item">${title}</div>`)
-                    .join('');
-            } else {
-                courseTitles.innerHTML = '<span class="no-courses">No courses available</span>';
-            }
-        }
-        
-    } catch (error) {
-        console.error('Error loading course stats:', error);
-        // Set default values on error
-        if (totalCourses) {
-            totalCourses.textContent = '0';
-        }
-        if (courseTitles) {
-            courseTitles.innerHTML = '<span class="error">Failed to load courses</span>';
-        }
-    }
+    addMessage('Welcome! You are now chatting with a human assistant. How can I help you today?', 'assistant', null, true);
 }
